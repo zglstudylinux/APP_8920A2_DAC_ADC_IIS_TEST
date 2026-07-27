@@ -38,8 +38,8 @@ int main(void)
     //DAC初始化
     dac_init();
 
-    //A3 任务: 强制切到 TEST_AUX_ADC2IISSRCTX (注释掉恢复 xcfg 配置选择)
-    xcfg_cb.test_mode = TEST_AUX_ADC2IISSRCTX;
+    //A2 任务: 强制切到 TEST_AUX_ADC2DAC (注释掉恢复 xcfg 配置选择), 引脚改 PB1/PB2
+    xcfg_cb.test_mode = TEST_AUX_ADC2DAC;
     //测试模式(setting配置界面中选择)
     switch (xcfg_cb.test_mode) {
     case TEST_PCM2DAC:

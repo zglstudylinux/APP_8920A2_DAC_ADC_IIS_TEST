@@ -109,7 +109,7 @@ dac_init()
   ↓
 根据 xcfg_cb.test_mode 选择一个测试入口
   ├─ TEST_PCM2DAC          → test_pcm2dac()
-  ├─ TEST_AUX_ADC2DAC     → test_aux_adc2dac()
+  ├─ TEST_AUX_ADC2DAC     → test_aux_adc2dac() (A2 引脚: PB1/PB2)
   ├─ TEST_AUX_ADC2IISSRCTX→ test_aux_adc2dac() + iis_master_srctx_init()
   └─ TEST_IISRX2DAC       → iis_slave_ram_rx_2_dac()
   ↓
@@ -136,7 +136,7 @@ dac_init()
 | 配置值 | 模式 | 数据流 | 初学者目标 |
 |---:|---|---|---|
 | 0 | `TEST_PCM2DAC` | 固定 PCM 数组 → DAC | 最先完成，验证 DAC、采样率和正弦表 |
-| 1 | `TEST_AUX_ADC2DAC` | AUX → SDADC → DMA → ISR → DAC | 理解 ADC、DMA、中断、实时直通 |
+| 1 | `TEST_AUX_ADC2DAC` | AUX (PB1/PB2) → SDADC → DMA → ISR → DAC | 理解 ADC、DMA、中断、实时直通 |
 | 2 | `TEST_AUX_ADC2IISSRCTX` | AUX → SDADC，同时 DAC 与 IIS SRC 输出 | 理解主机 IIS 的时钟和 SRCTX |
 | 3 | `TEST_IISRX2DAC` | IIS 从机接收 → DMA → ISR → DAC | 理解 IIS 接收、数据格式和缓冲调速 |
 
@@ -1877,6 +1877,8 @@ TEST_PCM2DAC
 > **任务目标**：重写 `auxadc_pcm_to_dac()`，实现 AUX 模拟信号 → ADC → DAC → 耳机。
 > **核心难点**：① 应用层覆盖库函数（库版本是 strong symbol）；② AUX 输入引脚实际是 PE6/PE7（不是默认的 PA6/PA7）；③ 库默认 `aux_analog_channel_select_ext()` 只支持 PA6/PA7。
 > **本次验证结果**：**有声音但有噪声**，核心链路打通，但需要做噪声优化。
+>
+> **⚠ 后续变更**：A3 任务完成后,为了让 IIS_G2 占用 PE6/PE7 (IIS LRC/DO),A2 baseline 的 AUX 引脚已统一改为 **PB1/PB2** (通道码 `0x22`)。所以当前 `auxadc_param_init()` 是 `CH_AUXL_PB1 | CH_AUXR_PB2`,PC7 历史日志里的 `0x33` (PE6/PE7) 是更早的实测快照。本节文字描述与代码历史保持原貌,引脚改动见 [docs/A3任务IIS_MASTER_SRCTX教学.md §4](../docs/A3任务IIS_MASTER_SRCTX教学.md)。
 
 ### 25.1 关键技术问题与解决方案
 
@@ -1947,7 +1949,7 @@ if (left) {
 | `app/projects/standard/app.cbp` | `<Add option="--wrap=auxadc_pcm_to_dac" />` |
 | `app/projects/standard/main.c` | 强制 `xcfg_cb.test_mode = TEST_AUX_ADC2DAC` |
 | `app/bsp_ext/bsp_adc_pcm_to_dac_ext.c` | 新增 `__wrap_auxadc_pcm_to_dac()` 实现 |
-| `app/bsp_ext/bsp_adc_aux_ext.c` | `channel` 改 PE6/PE7 + 放开 PE6/PE7 if 分支 |
+| `app/bsp_ext/bsp_adc_aux_ext.c` | `channel` 改 PB1/PB2 + 放开 PB1/PB2 if 分支 |
 | `app/bsp_ext/bsp_dac_ext.c` | `dac_obuf_init()` 末尾加 `AUBUFCON &= ~BIT(0)` 退出 reset |
 
 ### 25.3 实测日志（PC7）

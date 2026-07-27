@@ -89,7 +89,7 @@ A3 涉及 5 个文件，其中 3 个新增，2 个修改：
 | [`app/bsp_ext/bsp_adc_aux_ext.h`](../../app/bsp_ext/bsp_adc_aux_ext.h) | **新建**（原本空） | A3 专用 `test_aux_adc2dac_for_a3()` 原型声明 |
 | `docs/A3任务IIS_MASTER_SRCTX教学.md` | **新建** | 本文 |
 | [`app/bsp_ext/bsp_adc_aux_ext.c`](../../app/bsp_ext/bsp_adc_aux_ext.c) | **修改** | 新增 `auxadc_param_init_for_a3()` + `test_aux_adc2dac_for_a3()` |
-| [`app/projects/standard/main.c`](../../app/projects/standard/main.c) | **修改** | `case TEST_AUX_ADC2IISSRCTX:` 改调 `test_aux_adc2dac_for_a3()` |
+| [`app/projects/standard/main.c`](../../app/projects/standard/main.c) | **修改** | `case TEST_AUX_ADC2IISSRCTX:` 改调 `test_aux_adc2dac_for_a3()` + `iis_master_srctx_init()`。当前默认强制 `xcfg_cb.test_mode = TEST_AUX_ADC2DAC`（A2，引脚 PB1/PB2），切回 A3 测 IIS SRCTX 时需把强制模式改回 `TEST_AUX_ADC2IISSRCTX`。 |
 | [`app/projects/standard/app.cbp`](../../app/projects/standard/app.cbp) | **修改** | Linker 加 `--wrap=iis_master_srctx_init`；Unit 增加 `bsp_iis_master_ext.c` |
 
 ---
@@ -136,7 +136,8 @@ AUX (A2 原本在 PE6/PE7) **必须改到 PB1/PB2**，给 IIS 让出 PE5/PE6/PE7
 | PE7 | **IIS DO 输出** | AUX-R2 输入 |
 
 **A2 ↔ A3 引脚切换**：
-- A2 测完 → 把 AUX 杜邦线从 PE6/PE7 拔下，改插 PB1/PB2
+- A2 baseline 现在已统一走 PB1/PB2（避免每次切换拔线）
+- A3 复用相同引脚（PB1/PB2 给 AUX，PE5/PE6/PE7 给 IIS）
 - A4（RX）时把 AUX 杜邦线再拔掉（不需要）
 
 ### 4.3 MCLK 输出必须关闭
@@ -347,7 +348,7 @@ LRC 频率实测 = **47.85 kHz**（接近理论 48 kHz）✅
 - [x] IIS BCLK/LRC/DO 三路数字信号正确输出
 - [x] I2S 协议解码数据 = AUX 输入音频
 - [x] `--wrap=iis_master_srctx_init` 链接覆盖生效
-- [x] A2 baseline 保留（test_aux_adc2dac() 不变）
+- [x] A2 baseline 保留接口（`test_aux_adc2dac()`），但内部 channel 已改为 PB1/PB2（与 A3 保持一致，无需切换杜邦线）
 - [ ] DAC 模拟输出噪声调优（PC3/PC4 期间仍有问题，待后续专项处理）
 
 ---

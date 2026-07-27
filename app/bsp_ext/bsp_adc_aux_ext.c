@@ -114,11 +114,11 @@ void auxadc_param_init(void)  //鍙傛暟鍒濆鍖?
     printf("%s\n",__func__);
     memset(&auxadc_cb, 0, sizeof(auxadc_cb));
     auxadc_cb.buf = (u8 *)&buf_auxadc[0];      //澶嶇敤DAC鎵╁睍BUF 512bytes
-    //A2 浠诲姟: 鏍规嵁 8920A2 寮曡剼瀹氫箟鍥? AUX 杈撳叆瀹為檯鏄?
-    //   PE6 -> AUXL2 (ADC8) -> 宸﹀０閬?
-    //   PE7 -> AUXR2 (ADC9) -> 鍙冲０閬?
-    //娉ㄦ剰: 鍘熶唬鐮侀粯璁ょ殑 PA6/PA7 瀹為檯涓婁笉鏄?AUX 杈撳叆
-    auxadc_cb.channel = CH_AUXL_PE6 | CH_AUXR_PE7;  // 0x03 | 0x30 = 0x33
+    //A2 任务: AUX 改 PB1/PB2 (避开 PE6/PE7 给 IIS 用, 走 PB1/PB2 测试 DAC 输出)
+    //   PB1 -> AUXL (CH_AUXL_PB1)
+    //   PB2 -> AUXR (CH_AUXR_PB2)
+    //注意: 原代码默认的 PA6/PA7 实际上不是 AUX 输入
+    auxadc_cb.channel = CH_AUXL_PB1 | CH_AUXR_PB2;  // 0x02 | 0x20 = 0x22
     auxadc_cb.sample_rate = SPR_16000;  //A2 PC11: ADC 与 DAC 同步 16kHz, 不走 SRC;
     auxadc_cb.samples = 512;    //A2 PC12: 512个样点 (降低 ADC ISR 频率)
     auxadc_cb.gain = (8 << 6) | (15);    //A2 降噪: 模拟增益 8 (约 -3 dB), 数字增益 15 (约 -15 dB)

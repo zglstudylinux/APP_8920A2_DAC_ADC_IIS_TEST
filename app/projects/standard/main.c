@@ -38,8 +38,11 @@ int main(void)
     //DAC初始化
     dac_init();
 
-    //A2 任务: 强制切到 TEST_AUX_ADC2DAC (注释掉恢复 xcfg 配置选择), 引脚改 PB1/PB2
-    xcfg_cb.test_mode = TEST_AUX_ADC2DAC;
+    //A3+A4 双板联调: 强制切到测试模式 (烧录时根据板子切换下面两行)
+    //   板 A (A3): xcfg_cb.test_mode = TEST_AUX_ADC2IISSRCTX;  // AUX → DAC + IIS SRCTX 输出 44.1K
+    //   板 B (A4): xcfg_cb.test_mode = TEST_IISRX2DAC;         // IIS SLAVE RAMRX → DAC 接收 44.1K
+    xcfg_cb.test_mode = TEST_AUX_ADC2IISSRCTX;   // ← 板 A 默认 (烧板 B 时改下一行)
+    //xcfg_cb.test_mode = TEST_IISRX2DAC;        // ← 板 B 烧录时启用
     //测试模式(setting配置界面中选择)
     switch (xcfg_cb.test_mode) {
     case TEST_PCM2DAC:
@@ -56,18 +59,20 @@ int main(void)
         break;
 
     case TEST_AUX_ADC2IISSRCTX:
-        printf("TEST_AUX_ADC2IISSRCTX\n");
-        test_aux_adc2dac_for_a3();  //A3: PB1/PB2 + DAC 48K + ADC 48K
-        //库中,该函数功能为 IIS_MASTER_SRCTX,需要自行重写实现(AUX音频数据会能过DAC及IIS的BCLK,LRC,DO同时输出). 并上传实现代码
-        //可以用逻辑分析仪抓取IIS的BCLK,LRC,DO 三个IO口,查看是否有数据输出.
+        printf("TEST_AUX_ADC2IISSRCTX (board A: AUX -> DAC + IIS SRCTX 44.1K)\n");
+        test_aux_adc2dac_for_a3();  //A3: PB1/PB2 + DAC 44.1K + ADC 44.1K (与板 B 同步)
+        //A3: __wrap_iis_master_srctx_init 走 DAC 内部 SRC buffer, BCLK PE5 + LRC PE6 + DO PE7
+        //可以用逻辑分析仪抓取 PE5/PE6/PE7 三个 IO 口, 验证 IIS 输出
         iis_master_srctx_init();
         break;
 
     case TEST_IISRX2DAC:
-        //库中,该函数功能为 IIS_SLAVE_RAMRX 接收数据到从DAC推出,需要自行重写实现. 并上传实现代码.
-        //可以用另外一颗芯片,配置成 TEST_AUX_ADC2IISSRCTX,该芯片AUX->ADC->IIS发送出来的音频数据 通过 iis_slave_ram_rx_2_dac 接收到后,从DAC中推出来,听听声音是否正常
+        //A4: __wrap_iis_slave_ram_rx_2_dac 走 IIS RX DMA -> 库回调 iis_rx_process_test -> DAC
+        //   BCLK PE5 + LRC PE6 + DI PB2 (来自板 A 的 PE5/PE6/PE7, 杜邦线交叉: PE7 -> PB2)
+        //库函数 iis_slave_ram_rx_2_dac 由 GCC --wrap=iis_slave_ram_rx_2_dac 改写到本文件外
+        //   app/bsp_ext/bsp_iis_slave_ext.c::__wrap_iis_slave_ram_rx_2_dac
         iis_slave_ram_rx_2_dac();
-        printf("TEST_IISRX2DAC\n");
+        printf("TEST_IISRX2DAC (board B: IIS SLAVE RAMRX -> DAC 44.1K)\n");
         break;
 
     default:

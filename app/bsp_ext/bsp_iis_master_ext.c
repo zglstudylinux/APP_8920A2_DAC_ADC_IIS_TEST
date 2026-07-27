@@ -7,7 +7,7 @@
 //使用 GCC --wrap 链接选项: 库代码里所有 iis_master_srctx_init() 调用
 //会自动改写到 __wrap_iis_master_srctx_init() (本函数)。
 //
-//A3 整体架构:
+//A3 整体架构 (A3+A4 双板联调, 两板都跑 44.1K 同步):
 //   test_aux_adc2dac_for_a3()    →  AUX 音频 → SDADC → DMA → DAC FIFO → DAC 模拟输出
 //   __wrap_iis_master_srctx_init() →  DAC FIFO 同步 → IIS (BCLK/LRC/DO) 数字输出
 //

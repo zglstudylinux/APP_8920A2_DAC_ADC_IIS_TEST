@@ -39,6 +39,7 @@
 			<Add option="--gc-sections" />
 			<Add option="--wrap=auxadc_pcm_to_dac" />
 			<Add option="--wrap=iis_master_srctx_init" />
+			<Add option="--wrap=iis_slave_ram_rx_2_dac" />
 			<Add option="-Map=Output\bin\map.txt" />
 			<Add library="libplatform" />
 			<Add library="libbtstack" />
@@ -65,6 +66,10 @@
 		<Unit filename="../../bsp_ext/bsp_iis_master_ext.c">
 			<Option compilerVar="CC" />
 		</Unit>
+		<Unit filename="../../bsp_ext/bsp_iis_slave_ext.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../../bsp_ext/bsp_iis_slave_ext.h" />
 		<Unit filename="../../platform/bsp/bsp_param.c">
 			<Option compilerVar="CC" />
 		</Unit>

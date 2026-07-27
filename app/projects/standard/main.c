@@ -38,8 +38,8 @@ int main(void)
     //DAC初始化
     dac_init();
 
-    //A2 任务: 强制切到 TEST_AUX_ADC2DAC (注释掉恢复 xcfg 配置选择)
-    xcfg_cb.test_mode = TEST_AUX_ADC2DAC;
+    //A3 任务: 强制切到 TEST_AUX_ADC2IISSRCTX (注释掉恢复 xcfg 配置选择)
+    xcfg_cb.test_mode = TEST_AUX_ADC2IISSRCTX;
     //测试模式(setting配置界面中选择)
     switch (xcfg_cb.test_mode) {
     case TEST_PCM2DAC:
@@ -57,7 +57,7 @@ int main(void)
 
     case TEST_AUX_ADC2IISSRCTX:
         printf("TEST_AUX_ADC2IISSRCTX\n");
-        test_aux_adc2dac();
+        test_aux_adc2dac_for_a3();  //A3: PB1/PB2 + DAC 48K + ADC 48K
         //库中,该函数功能为 IIS_MASTER_SRCTX,需要自行重写实现(AUX音频数据会能过DAC及IIS的BCLK,LRC,DO同时输出). 并上传实现代码
         //可以用逻辑分析仪抓取IIS的BCLK,LRC,DO 三个IO口,查看是否有数据输出.
         iis_master_srctx_init();

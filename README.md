@@ -73,7 +73,7 @@ APP_8920A2_DAC_ADC_IIS_NEW_TEST
 | 工程基线（PC1：Code::Blocks Build + 烧录 + 1 kHz 声音） | ✅ | [PC1](docs/SDK入门与任务实施指南.md#21-第一次运行日志逐行分析) |
 | 任务 A1：DAC 输出 500/1k/2k Hz 三种正弦波 | ✅ | [PC2~PC6](docs/SDK入门与任务实施指南.md#22-任务-a1-第-1-步验证采样率-8k--16k) + [小白教学](docs/BT8920A2音频实验教学.md) |
 | 任务 A2：AUX ADC → DAC（重写 `auxadc_pcm_to_dac`） | ✅ | [PC7~PC12](docs/SDK入门与任务实施指南.md#25-任务-a2-验证aux-adc--dacpc7) + [降噪调优](docs/A2任务降噪调优教学.md) |
-| 任务 A3：IIS Master SRCTX（重写 `iis_master_srctx_init`） | ⏳ | 待开始（需逻辑分析仪或第二块板）|
+| 任务 A3：IIS Master SRCTX（重写 `iis_master_srctx_init`） | ✅ | 分支 `new_minimax_zgl01` + [A3 教学](docs/A3任务IIS_MASTER_SRCTX教学.md)。AUX 杜邦线改 PB1/PB2，IIS_G2 (PE5/PE6/PE7)，DAC 48 kHz。逻辑分析仪验证 BCLK=1.667MHz / LRC=47.85kHz / DO 数据 = 1 kHz 正弦。**DAC 模拟输出降噪待 A3.1 专项** |
 | 任务 A4：IIS Slave RAMRX → DAC（重写 `iis_slave_ram_rx_2_dac`） | ⏳ | 待开始（依赖 A3）|
 | 任务 B：SDDAC 实战 | ⏳ | 待开始 |
 | 任务 C：SDADC 实战 | ⏳ | 待开始 |
@@ -91,7 +91,9 @@ APP_8920A2_DAC_ADC_IIS_NEW_TEST
 | `app/bsp_ext/bsp_dac_ext.c` | DAC 配置 + `dac_obuf_init()` 加 `AUBUFCON &= ~BIT(0)` |
 | `app/bsp_ext/bsp_adc_aux_ext.c` | AUX 通道改 PE6/PE7 + 放开 PE6/PE7 路径 + samples=512 |
 | `app/bsp_ext/bsp_adc_pcm_to_dac_ext.c` | `__wrap_auxadc_pcm_to_dac` 应用层实现 |
-| `app/bsp_ext/bsp_iis_ext.h` | IIS 类型定义（A3/A4 待实现）|
+| `app/bsp_ext/bsp_iis_ext.h` | IIS 类型定义（A3/A4 实现已用 `iis_cfg_init()` 库 API）|
+| `app/bsp_ext/bsp_iis_master_ext.c` | A3：`__wrap_iis_master_srctx_init()`（用 `iis_cfg_init()` 配 IIS_MASTER_SRCTX + IIS_G2 + MCLK_DIS）|
+| `app/bsp_ext/bsp_adc_aux_ext.h` | A3：`test_aux_adc2dac_for_a3()` / `auxadc_param_init_for_a3()` 原型 |
 
 ---
 

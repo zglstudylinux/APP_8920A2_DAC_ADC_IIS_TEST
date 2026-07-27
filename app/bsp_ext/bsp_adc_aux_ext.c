@@ -332,6 +332,36 @@ void test_aux_adc2dac(void)
     //閰嶇疆瀹屾垚鐨?浼氬湪ADC涓柇涓帹DAC
 }
 
+//A3 任务: 复用 test_aux_adc2dac() 的结构, 但是改 PB1/PB2 + 48K
+//PC2: DAC 切到 48K (SRCTX 必须), ADC 同步 48K (不经 SRC 上采, 减少噪声)
+AT(.text.aux)
+void auxadc_param_init_for_a3(void)
+{
+    printf("%s\n",__func__);
+    memset(&auxadc_cb, 0, sizeof(auxadc_cb));
+    auxadc_cb.buf = (u8 *)&buf_auxadc[0];
+    //A3 关键改动: AUX 改 PB1/PB2, 避开 PE6/PE7 (留给 IIS LRC/DO)
+    auxadc_cb.channel = CH_AUXL_PB1 | CH_AUXR_PB2;  //0x02 | 0x20 = 0x22
+    //A3 关键改动: ADC 采样率 48K, 与 DAC 48K 同步 (不经 SRC)
+    auxadc_cb.sample_rate = SPR_48000;
+    //A2 调好的参数保留: samples=512, gain=(8<<6)|15
+    auxadc_cb.samples = 512;
+    auxadc_cb.gain = (8 << 6) | (15);
+    auxadc_irq_init();
+}
+
+AT(.text.aux)
+void test_aux_adc2dac_for_a3(void)
+{
+    //DAC 输出采样率 48K (SRCTX 要求 44.1K / 48K)
+    dac_spr_set(SPR_48000);
+    dac_set_dvol(DIG_N0DB);
+    dac_set_avol(53);     //A2 PC12 调好的音量
+    auxadc_param_init_for_a3();  //PB1/PB2 + 48K
+    auxadc_digital_init();
+    auxadc_analog_init();
+}
+
 
 
 

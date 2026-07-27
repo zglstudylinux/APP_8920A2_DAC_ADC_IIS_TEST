@@ -42,7 +42,7 @@ int main(void)
     //   板 A (A3): xcfg_cb.test_mode = TEST_AUX_ADC2IISSRCTX;  // AUX → DAC + IIS SRCTX 输出 44.1K
     //   板 B (A4): xcfg_cb.test_mode = TEST_IISRX2DAC;         // IIS SLAVE RAMRX → DAC 接收 44.1K
     xcfg_cb.test_mode = TEST_AUX_ADC2IISSRCTX;   // ← 板 A 默认 (烧板 B 时改下一行)
-    //xcfg_cb.test_mode = TEST_IISRX2DAC;        // ← 板 B 烧录时启用
+//    xcfg_cb.test_mode = TEST_IISRX2DAC;        // ← 板 B 烧录时启用
     //测试模式(setting配置界面中选择)
     switch (xcfg_cb.test_mode) {
     case TEST_PCM2DAC:

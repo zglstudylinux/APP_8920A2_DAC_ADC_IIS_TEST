@@ -31,10 +31,19 @@ extern u8 iis_dmabuf1[2048];
 
 //A4: 用应用层 iis_cfg_init() 库函数 + 手配 GPIO/时钟
 //     SLAVE_RAMRX 模式使用 iis_rx_process_test 库回调推 DAC (自带 aubuf_adjust 调速)
+//
+//★ 关键修复 ★
+//   cfg 必须 static / 全局, 不能放栈上!
+//   iis_cfg_init() 内部保存 cfg 指针 iis_libcfg, wrap() 返回后栈帧释放
+//   iis_libcfg 指向已回收内存, ISR 触发 iis_rx_process_test 时访问它会读到
+//   栈垃圾(0x2323...), 导致 ERR:3/7 EPC=0x23232324 反复重启
+//   (库原版 iis_slave_ram_rx_2_dac 就是用 static iis_cfg_t iis_cfg; 反汇编已知)
 AT(.com_text.iis_ext)
+static iis_cfg_t iis_cfg_slave;     // ★ 必须 static, 不能放栈上!
+
 void __wrap_iis_slave_ram_rx_2_dac(void)
 {
-    iis_cfg_t cfg;
+    iis_cfg_t *cfg = &iis_cfg_slave;     //指向 static 变量,生命周期与程序同
 
     printf("\n--->%s (SLAVE_RAMRX via iis_cfg_init)\n", __func__);
 
@@ -83,25 +92,25 @@ void __wrap_iis_slave_ram_rx_2_dac(void)
 
     //-----------------------------------------------------------------------
     // 3) 配 iis_cfg_t
-    //   注意: dma_en = 1 (SLAVE_RAMRX 模式必须有 RAM DMA)
+    //   注意: dma_en = 0 (库原版就是 0, mode 已含 DMA 标志)
     //-----------------------------------------------------------------------
-    memset(&cfg, 0, sizeof(cfg));
-    cfg.mode        = IIS_SLAVE_RAMRX;        // 0x0A = IISCFG_RX|IISCFG_DMA (slave)
-    cfg.iomap       = IIS_G2;                  // PE5=BCLK, PE6=LRC, PB2=DI (MCLK PB1 DIS)
-    cfg.bit_mode    = IIS_16BIT;               // 16-bit
-    cfg.data_mode   = IIS_DATA_NORMAL;         // IIS normal
-    cfg.mclk_sel    = IIS_MCLK_256FS;          // 256fs
-    cfg.mclk_out_en = IIS_MCLK_OUT_DIS;        // 不输出 MCLK
-    cfg.dma_en      = 1;                       // ★ SLAVE_RAMRX 必须 DMA
+    memset(cfg, 0, sizeof(*cfg));                              //★ 清 struct 本身, 不是清指针
+    cfg->mode        = IIS_SLAVE_RAMRX;        // 0x0A = IISCFG_RX|IISCFG_DMA (slave)
+    cfg->iomap       = IIS_G2;                  // PE5=BCLK, PE6=LRC, PB2=DI (MCLK PB1 DIS)
+    cfg->bit_mode    = IIS_16BIT;               // 16-bit
+    cfg->data_mode   = IIS_DATA_NORMAL;         // IIS normal
+    cfg->mclk_sel    = IIS_MCLK_256FS;          // 256fs
+    cfg->mclk_out_en = IIS_MCLK_OUT_DIS;        // 不输出 MCLK
+    cfg->dma_en      = 0;                       // ★ 库原版也是 0 (mode 已含 DMA 标志)
 
     //DMA 配置: 库默认 64 samples/buffer, 2048 bytes, 复用库内 bram
-    cfg.dma_cfg.samples            = 64;
-    cfg.dma_cfg.dmabuf_len         = 2048;
-    cfg.dma_cfg.dmabuf_ptr         = iis_dmabuf1;             //库 .iis2dac_buf, ram.ld 已预留
-    cfg.dma_cfg.iis_isr_rx_callbck = iis_rx_process_test;     //★ 库回调(自带 aubuf_adjust + 推 DAC FIFO + 1s 打印)
-    cfg.dma_cfg.iis_isr_tx_callbck = NULL;                    //A4 只收不发
+    cfg->dma_cfg.samples            = 64;
+    cfg->dma_cfg.dmabuf_len         = 2048;
+    cfg->dma_cfg.dmabuf_ptr         = iis_dmabuf1;             //库 .iis2dac_buf, ram.ld 已预留
+    cfg->dma_cfg.iis_isr_rx_callbck = iis_rx_process_test;     //★ 库回调(自带 aubuf_adjust + 推 DAC FIFO + 1s 打印)
+    cfg->dma_cfg.iis_isr_tx_callbck = NULL;                    //A4 只收不发
 
-    iis_cfg_init(&cfg);
+    iis_cfg_init(cfg);
 
     //-----------------------------------------------------------------------
     // 4) 启动 IIS

@@ -1138,18 +1138,20 @@ ADC → IIS OUT → IIS IN → DAC
 - 逻辑分析仪观察 BCLK、LRC、DO；
 - 或连接另一块板进行接收验证。
 
-#### A4. `TEST_IISRX2DAC`
+#### A4. `TEST_IISRX2DAC` ✅
 
-**函数**：`iis_slave_ram_rx_2_dac()`。
+**函数**：`iis_slave_ram_rx_2_dac()` → `__wrap_iis_slave_ram_rx_2_dac()` ([`app/bsp_ext/bsp_iis_slave_ext.c`](../app/bsp_ext/bsp_iis_slave_ext.c))。
 
-**必须完成**：
+**A4 已完成**(分支 `new_minimax_zgl01`,双板联调成功):
+- 配置从机 RAMRX (IIS_SLAVE_RAMRX=0x0A, IIS_G2: PE5=BCLK in / PE6=LRC in / PB2=DI in)
+- 配置 DMA 双缓冲 (64 samples, dmabuf=2048B 在 `.iis2dac_buf`)
+- 复用库回调 `iis_rx_process_test` 推 DAC FIFO (自带 `aubuf_adjust` 调速)
+- 与 A3 板双板联调,4 根线接好即可听声
+- **关键修复**:`iis_cfg_t` 必须 `static`,否则 ISR 触发后崩溃 ERR:3/7 (栈帧释放后 `iis_libcfg` 悬空)
 
-- 配置从机 RAMRX；
-- 配置 DMA 双缓冲；
-- RX 回调处理 16/32 位格式；
-- 数据写入 DAC；
-- 需要时使用 FIFO 调速；
-- 与 A3 双板联调。
+**验收**:板 B 耳机听到 PC 1kHz 正弦波,串口 `FIFOCNT` 50~80% 波动,`PHASECOM` 稳定。
+
+详见 [docs/A4任务IIS_SLAVE_RAMRX教学.md](A4任务IIS_SLAVE_RAMRX教学.md)。
 
 ### 任务 B：SDDAC
 

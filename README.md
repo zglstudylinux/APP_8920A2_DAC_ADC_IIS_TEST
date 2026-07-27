@@ -6,7 +6,7 @@ APP_8920A2_DAC_ADC_IIS_NEW_TEST
 > - 任务 A/B/C/D 的应用层实现（[docs/待完成任务.md](docs/待完成任务.md)）；
 > - 验证 DAC / SDADC / IIS 通路在真实开发板上的工作行为。
 
-**当前进度**：✅ A1 + A2 完成；⏳ A3 / A4 / B / C / D 待开始。
+**当前进度**：✅ A1 + A2 + A3 + A4 完成；⏳ B / C / D 待开始。
 详见 [docs/待完成任务.md](docs/待完成任务.md)。
 
 ---
@@ -73,8 +73,8 @@ APP_8920A2_DAC_ADC_IIS_NEW_TEST
 | 工程基线（PC1：Code::Blocks Build + 烧录 + 1 kHz 声音） | ✅ | [PC1](docs/SDK入门与任务实施指南.md#21-第一次运行日志逐行分析) |
 | 任务 A1：DAC 输出 500/1k/2k Hz 三种正弦波 | ✅ | [PC2~PC6](docs/SDK入门与任务实施指南.md#22-任务-a1-第-1-步验证采样率-8k--16k) + [小白教学](docs/BT8920A2音频实验教学.md) |
 | 任务 A2：AUX ADC → DAC（重写 `auxadc_pcm_to_dac`） | ✅ | [PC7~PC12](docs/SDK入门与任务实施指南.md#25-任务-a2-验证aux-adc--dacpc7) + [降噪调优](docs/A2任务降噪调优教学.md) |
-| 任务 A3：IIS Master SRCTX（重写 `iis_master_srctx_init`） | ✅ | 分支 `new_minimax_zgl01` + [A3 教学](docs/A3任务IIS_MASTER_SRCTX教学.md)。AUX 杜邦线改 PB1/PB2，IIS_G2 (PE5/PE6/PE7)，DAC 48 kHz。逻辑分析仪验证 BCLK=1.667MHz / LRC=47.85kHz / DO 数据 = 1 kHz 正弦。**DAC 模拟输出降噪待 A3.1 专项**；当前默认测试模式已切回 `TEST_AUX_ADC2DAC`（A2，引脚 PB1/PB2）。 |
-| 任务 A4：IIS Slave RAMRX → DAC（重写 `iis_slave_ram_rx_2_dac`） | ⏳ | 待开始（依赖 A3）|
+| 任务 A3：IIS Master SRCTX（重写 `iis_master_srctx_init`） | ✅ | 分支 `new_minimax_zgl01` + [A3 教学](docs/A3任务IIS_MASTER_SRCTX教学.md)。AUX 杜邦线改 PB1/PB2，IIS_G2 (PE5/PE6/PE7)。**A3+A4 联动后 DAC 改 44.1 kHz 与 A4 板同步**，逻辑分析仪验证 BCLK=1.428MHz / LRC=44.05kHz / DO 数据 = 1 kHz 正弦。 |
+| 任务 A4：IIS Slave RAMRX → DAC（重写 `iis_slave_ram_rx_2_dac`） | ✅ | 分支 `new_minimax_zgl01` + [A4 教学](docs/A4任务IIS_SLAVE_RAMRX教学.md)。IIS_G2 (PE5=BCLK in, PE6=LRC in, PB2=DI in)，DMA 双缓冲 64 samples，库 `iis_rx_process_test` 回调推 DAC FIFO + `aubuf_adjust` 调速。**双板联调首战即可听声**（4 根线 + GND）。踩坑记录：`iis_cfg_t` 必须 `static`，否则 ISR 触发后崩溃 ERR:3/7。 |
 | 任务 B：SDDAC 实战 | ⏳ | 待开始 |
 | 任务 C：SDADC 实战 | ⏳ | 待开始 |
 | 任务 D：IIS 端到端链路 | ⏳ | 待开始（依赖 A3+A4）|
@@ -86,13 +86,14 @@ APP_8920A2_DAC_ADC_IIS_NEW_TEST
 | 文件 | 作用 |
 |---|---|
 | `app/projects/standard/app.cbp` | 加 `--wrap=auxadc_pcm_to_dac` 链接器选项 |
-| `app/projects/standard/main.c` | 强制 `xcfg_cb.test_mode = TEST_AUX_ADC2DAC`（A2 模式，引脚 PB1/PB2）|
+| `app/projects/standard/main.c` | 强制 `xcfg_cb.test_mode = TEST_AUX_ADC2IISSRCTX`（A3 板默认）；A4 板烧录时改为 `TEST_IISRX2DAC`（双板切换）|
 | `app/platform/bsp/bsp_sys.c` | A1 测试入口 + 三张正弦表（500/1k/2k）+ `A1_CUR_FREQ` 宏 |
 | `app/bsp_ext/bsp_dac_ext.c` | DAC 配置 + `dac_obuf_init()` 加 `AUBUFCON &= ~BIT(0)` |
 | `app/bsp_ext/bsp_adc_aux_ext.c` | AUX 通道改 PB1/PB2 + 放开 PB1/PB2 路径 + samples=512 |
 | `app/bsp_ext/bsp_adc_pcm_to_dac_ext.c` | `__wrap_auxadc_pcm_to_dac` 应用层实现 |
 | `app/bsp_ext/bsp_iis_ext.h` | IIS 类型定义（A3/A4 实现已用 `iis_cfg_init()` 库 API）|
 | `app/bsp_ext/bsp_iis_master_ext.c` | A3：`__wrap_iis_master_srctx_init()`（用 `iis_cfg_init()` 配 IIS_MASTER_SRCTX + IIS_G2 + MCLK_DIS）|
+| `app/bsp_ext/bsp_iis_slave_ext.c` | A4：`__wrap_iis_slave_ram_rx_2_dac()`（用 `iis_cfg_init()` 配 IIS_SLAVE_RAMRX + IIS_G2 + 库 `iis_rx_process_test` 回调推 DAC）|
 | `app/bsp_ext/bsp_adc_aux_ext.h` | A3：`test_aux_adc2dac_for_a3()` / `auxadc_param_init_for_a3()` 原型 |
 
 ---

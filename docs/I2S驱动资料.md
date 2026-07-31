@@ -3,6 +3,23 @@
 - 公司各芯片IIS模块基本一样,下面以530X芯片的IIS为例讲解IIS.
 - IIS可以配置为8种工作模式如下:
 
+```mermaid
+flowchart TD
+    subgraph IIS_Modes["IIS 8种工作模式"]
+        MASTER["主机 (产生BCLK/LRC)"]
+        SLAVE["从机 (接收BCLK/LRC)"]
+        SRCTX["SRCTX: 数据走DAC SRC缓冲"]
+        RAMTX["RAMTX: 数据走RAM DMA发送"]
+        RAMRX["RAMRX: 数据走RAM DMA接收"]
+    end
+
+    MASTER --> SRCTX
+    MASTER --> RAMTX
+    MASTER --> RAMRX
+    SLAVE --> RAMTX
+    SLAVE --> RAMRX
+```
+
 ```
 //NOTE:
 //SRCTX: IIS从SRC(DAC_BUF变采样后)拿数据推出,声音可以和DAC同时输出, 只支持 44.1 or 48K 采样率输出. 输出采样率同DAC输出的采样率. 只有主机模式才支持SRCTX
@@ -126,6 +143,25 @@ typedef struct {
 #endif
 ~~~
 
+```mermaid
+flowchart LR
+    PLL["PLL1DIV 参考时钟"] -->|"÷ (mclk_div+1)"| MCLK["MCLK"]
+    MCLK -->|"÷ (bclk_div+1)"| BCLK["BCLK"]
+    BCLK -->|"÷ (bit_width×2)"| LRC["LRC = 采样率"]
+    
+    subgraph 44k1["44.1kHz 16bit 256fs"]
+        MCLK_44["MCLK=11.2896MHz"]
+        BCLK_44["BCLK=1.4112MHz"]
+        LRC_44["LRC=44.1kHz"]
+    end
+    
+    subgraph 48k["48kHz 16bit 256fs"]
+        MCLK_48["MCLK=12.288MHz"]
+        BCLK_48["BCLK=1.536MHz"]
+        LRC_48["LRC=48kHz"]
+    end
+```
+
 iis_ext.c：
 
 ```c
@@ -184,6 +220,7 @@ u8 i2s_32bit_clk_div[3][2] = {
     {2-1,4-1}, //128fs
     {4-1,2-1}, //256fs
 };
+
 
 u32 iis_tx_dma_addr_inc(void);
 u32 iis_rx_dma_addr_inc(void);

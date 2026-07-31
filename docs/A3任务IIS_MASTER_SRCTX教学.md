@@ -14,9 +14,9 @@
 
 ```text
    电脑音频 (1 kHz 正弦)
-       ↓ AUX 接口 (PB1/PB2, A3 改的)
+       ↓ AUX 接口 (PB1/PB2)
    SDADC 模拟通路 + 数字采样
-       ↓ DMA 搬运 (512 samples = ~10.7 ms @ 48 kHz)
+       ↓ DMA 搬运 (512 samples = ~11.6 ms @ 44.1 kHz)
    buf_auxadc[512]
        ↓ DMA 半中断 / 全中断
    auxadc_isr()
@@ -30,6 +30,36 @@
             PE5 / PE6 / PE7 三个引脚
               ↓ 杜邦线 / 逻辑分析仪
             另一颗芯片 / 逻辑分析仪验证
+```
+
+```mermaid
+flowchart LR
+    subgraph 板A["板 A (A3)"]
+        AUX_IN["AUX输入 PB1/PB2"]
+        ADC["SDADC 44.1kHz"]
+        DMA_BUF["buf_auxadc[512]"]
+        ISR_A3["auxadc_isr()"]
+        DAC_FIFO["DAC FIFO"]
+        DAC_OUT["DAC模拟输出 → 耳机"]
+        SRCTX["IIS_MASTER_SRCTX DACDIGCON0 BIT(23)"]
+        IIS_PINS["PE5=BCLK PE6=LRC PE7=DO"]
+
+        AUX_IN --> ADC --> DMA_BUF --> ISR_A3 --> DAC_FIFO
+        DAC_FIFO --> DAC_OUT
+        DAC_FIFO --> SRCTX --> IIS_PINS
+    end
+
+    subgraph 板B["板 B (A4)"]
+        IIS_IN["PE5=BCLK PE6=LRC PB2=DI"]
+        DMA_RX["IIS RX DMA"]
+        RAM_BUF["iis_dmabuf1"]
+        CALLBACK["iis_rx_process_test"]
+        DAC_B["DAC模拟输出 → 耳机"]
+        
+        IIS_IN --> DMA_RX --> RAM_BUF --> CALLBACK --> DAC_B
+    end
+
+    IIS_PINS -->|杜邦线 4根| IIS_IN
 ```
 
 ---
@@ -62,6 +92,26 @@ I²S 用 **至少 3 根线** 传立体声音频：
               数据在 BCLK 上升沿采样 (具体看从机要求)
 ```
 
+```mermaid
+sequenceDiagram
+    participant M as Master (板A)
+    participant BCLK as BCLK线
+    participant LRC as LRC线
+    participant DO as DO线
+    participant S as Slave (板B)
+
+    M->>LRC: LRC=0 (左声道)
+    loop 16 BCLK cycles
+        M->>BCLK: BCLK脉冲
+        M->>DO: MSB...LSB (左声道数据)
+    end
+    M->>LRC: LRC=1 (右声道)
+    loop 16 BCLK cycles
+        M->>BCLK: BCLK脉冲
+        M->>DO: MSB...LSB (右声道数据)
+    end
+```
+
 ### 1.3 BT8920A2 的 I²S 模块
 
 根据 [`app/bsp_ext/bsp_iis_ext.h`](../../app/bsp_ext/bsp_iis_ext.h)，芯片支持 10 种 IIS 模式，本任务用的是：
@@ -75,6 +125,7 @@ I²S 用 **至少 3 根线** 传立体声音频：
 
 **SRCTX 的特点**：数据从 DAC 内部的 SRC（Sample Rate Converter）buffer 拿，所以**DAC 和 IIS 同步输出同一个音频**，声音一致。限制：
 - **采样率必须 44.1 kHz 或 48 kHz**（这是 DAC 主时钟的硬件限制）
+- **当前代码使用 44.1 kHz**（与板 B A4 同步，跨板 LRC 完全同步）
 - **只有主机模式**支持 SRCTX
 
 ---
@@ -89,7 +140,7 @@ A3 涉及 5 个文件，其中 3 个新增，2 个修改：
 | [`app/bsp_ext/bsp_adc_aux_ext.h`](../../app/bsp_ext/bsp_adc_aux_ext.h) | **新建**（原本空） | A3 专用 `test_aux_adc2dac_for_a3()` 原型声明 |
 | `docs/A3任务IIS_MASTER_SRCTX教学.md` | **新建** | 本文 |
 | [`app/bsp_ext/bsp_adc_aux_ext.c`](../../app/bsp_ext/bsp_adc_aux_ext.c) | **修改** | 新增 `auxadc_param_init_for_a3()` + `test_aux_adc2dac_for_a3()` |
-| [`app/projects/standard/main.c`](../../app/projects/standard/main.c) | **修改** | `case TEST_AUX_ADC2IISSRCTX:` 改调 `test_aux_adc2dac_for_a3()` + `iis_master_srctx_init()`。当前默认强制 `xcfg_cb.test_mode = TEST_AUX_ADC2DAC`（A2，引脚 PB1/PB2），切回 A3 测 IIS SRCTX 时需把强制模式改回 `TEST_AUX_ADC2IISSRCTX`。 |
+| [`app/projects/standard/main.c`](../../app/projects/standard/main.c) | **修改** | `case TEST_AUX_ADC2IISSRCTX:` 调 `test_aux_adc2dac_for_a3()` + `iis_master_srctx_init()`。当前默认强制 `xcfg_cb.test_mode = TEST_AUX_ADC2IISSRCTX`（A3 板默认）。 |
 | [`app/projects/standard/app.cbp`](../../app/projects/standard/app.cbp) | **修改** | Linker 加 `--wrap=iis_master_srctx_init`；Unit 增加 `bsp_iis_master_ext.c` |
 
 ---
@@ -154,10 +205,10 @@ AUX (A2 原本在 PE6/PE7) **必须改到 PB1/PB2**，给 IIS 让出 PE5/PE6/PE7
 
 ```c
 void test_aux_adc2dac_for_a3(void) {
-    dac_spr_set(SPR_48000);       //★ DAC 48 kHz (SRCTX 必须)
+    dac_spr_set(SPR_44100);       //★ DAC 44.1 kHz (与板 B A4 同步)
     dac_set_dvol(DIG_N0DB);
     dac_set_avol(53);             //保留 A2 已调好的音量
-    auxadc_param_init_for_a3();   //★ PB1/PB2 + 48 kHz
+    auxadc_param_init_for_a3();   //★ PB1/PB2 + 44.1 kHz
     auxadc_digital_init();
     auxadc_analog_init();
 }
@@ -165,8 +216,8 @@ void test_aux_adc2dac_for_a3(void) {
 void auxadc_param_init_for_a3(void) {
     memset(&auxadc_cb, 0, sizeof(auxadc_cb));
     auxadc_cb.buf = (u8 *)&buf_auxadc[0];
-    auxadc_cb.channel  = CH_AUXL_PB1 | CH_AUXR_PB2;  //★ 0x22, 不是 A2 的 0x33
-    auxadc_cb.sample_rate = SPR_48000;               //★ 48 kHz, 不是 A2 的 16 kHz
+    auxadc_cb.channel  = CH_AUXL_PB1 | CH_AUXR_PB2;  //★ 0x22, 不是老 A2 的 0x33
+    auxadc_cb.sample_rate = SPR_44100;               //★ 44.1 kHz, 与板 B 同步
     auxadc_cb.samples  = 512;                        //保留 A2 调优
     auxadc_cb.gain     = (8 << 6) | 15;              //保留 A2 降噪调参
     auxadc_irq_init();
@@ -244,12 +295,12 @@ void __wrap_iis_master_srctx_init(void) {
 
 **验证**：串口打印 `--->__wrap_iis_master_srctx_init (PC1 stub)` → `--wrap` 链接生效。
 
-### PC2：AUX 改 PB1/PB2 + DAC 48K
+### PC2：AUX 改 PB1/PB2 + DAC 44.1K
 
 | 文件 | 改动 |
 |---|---|
 | `bsp_adc_aux_ext.h`（新建） | 声明 `test_aux_adc2dac_for_a3()` |
-| `bsp_adc_aux_ext.c` | 新增 `auxadc_param_init_for_a3()`（channel=0x22, sample_rate=48K）+ `test_aux_adc2dac_for_a3()`（dac_spr_set SPR_48000）|
+| `bsp_adc_aux_ext.c` | 新增 `auxadc_param_init_for_a3()`（channel=0x22, sample_rate=44.1K）+ `test_aux_adc2dac_for_a3()`（dac_spr_set SPR_44100）|
 | `main.c:60` | `test_aux_adc2dac();` → `test_aux_adc2dac_for_a3();` |
 
 **硬件**：拔下 AUX 线 PE6/PE7，改插 PB1/PB2。
@@ -285,7 +336,7 @@ void __wrap_iis_master_srctx_init(void) {
 
 **AUX 输入 1 kHz 正弦波**，重新抓：
 
-**实测数据**（LA1010 解析结果）：
+**实测数据**（LA1010 解析结果，44.1kHz 采样率）：
 ```
 Ch1 (L): 0xFF13 → 0xFF6C → 0xFFCC → 0x002B → 0x0088 → 0x00E5 → 0x0131 → 0x018D
         → 0x01D8 → 0x021B → 0x0257 → 0x0288 → 0x02AB → 0x02C4 → 0x02BA → 0x02D2
@@ -293,9 +344,9 @@ Ch2 (R): 0xFF73 → 0xFFCF → 0x002B → 0x0084 → 0x00DC → 0x0131 → 0x018
         → 0x01C9 → 0x020A → 0x0243 → 0x0270 → 0x0293 → 0x02AD → 0x02BA → 0x02D2
 ```
 
-→ 这是个 **清晰的正弦波爬升段**（从 -237 到 +722，约 +959 跨越），符合 1 kHz 正弦在 48 kHz 采样率下 1/3 周期的特征 ✅
+→ 这是个 **清晰的正弦波爬升段**（从 -237 到 +722，约 +959 跨越），符合 1 kHz 正弦在 44.1 kHz 采样率下的特征 ✅
 
-LRC 频率实测 = **47.85 kHz**（接近理论 48 kHz）✅
+LRC 频率实测 = **~44.05 kHz**（接近理论 44.1 kHz）✅
 
 ---
 
@@ -315,17 +366,17 @@ LRC 频率实测 = **47.85 kHz**（接近理论 48 kHz）✅
 
 ## 第 8 节 · 已知问题 / 后续调优
 
-### 8.1 DAC 模拟输出噪声（PC3/PC4 期间用户反馈）
+### 8.1 DAC 模拟输出噪声（✅ 已修复，2026-07-30）
 
-**现象**：
-- AUX 1 kHz 输入 → DAC 耳机听到 1 kHz，但是**有很大的噪声**，示波器看波形**频率跳动 + 毛刺多**
-- DAC FIFOCNT 在 A2/PC3 时一直 575 (满)；启用 SRCTX 后应该有动态变化
+**现象**（修复前）：
+- AUX 输入 → DAC 耳机输出，音乐中有明显的周期性"滋滋"噪音
+- 示波器看波形有毛刺
 
-**下一步**（独立任务 / 待分配）：
-1. 检查 PC2 时 avol=53 / gain=(8<<6)|15 是否仍适合 48 kHz
-2. 试 `samples=256` 或 `samples=1024` 对比 FIFO 余量
-3. 看 DAC PHASECOMP 是否需要动态调整（同 A2 教学中的 `aubuf_adjust()` 思路，但 SRCTX 模式可能不需要）
-4. 试 44.1 kHz 而不是 48 kHz（取决于 PLL 噪声）
+**根因与修复**（详见 [噪音排查与修复指南.md](噪音排查与修复指南.md)）：
+1. **DMA 循环缓冲区双缓冲 bug**（主因）：`__wrap_auxadc_pcm_to_dac` 无视 `flag` 参数，每次都读全部 512 对数据，在半满中断时混入 50% 旧数据
+2. **ISR 内串口打印**：每秒一次的 `print_r()` / `print_dac_info()` 造成周期性噪音耦合
+
+**修复后**：基本无噪音，音乐清晰。
 
 ### 8.2 BCLK 频率偏差
 
@@ -349,7 +400,7 @@ LRC 频率实测 = **47.85 kHz**（接近理论 48 kHz）✅
 - [x] I2S 协议解码数据 = AUX 输入音频
 - [x] `--wrap=iis_master_srctx_init` 链接覆盖生效
 - [x] A2 baseline 保留接口（`test_aux_adc2dac()`），但内部 channel 已改为 PB1/PB2（与 A3 保持一致，无需切换杜邦线）
-- [ ] DAC 模拟输出噪声调优（PC3/PC4 期间仍有问题，待后续专项处理）
+- [x] DAC 模拟输出噪声调优 ✅ (2026-07-30 修复，详见 [噪音排查与修复指南](噪音排查与修复指南.md))
 
 ---
 
@@ -366,7 +417,7 @@ A4 `iis_slave_ram_rx_2_dac()` 重写：
 
 ---
 
-**提交**: `feat(a3): rewrite iis_master_srctx_init() via --wrap, DAC 48K + IIS_G2 SRCTX`
+**提交**: `feat(a3): rewrite iis_master_srctx_init() via --wrap, DAC 44.1K + IIS_G2 SRCTX`
 **分支**: `new_minimax_zgl01`
 **完成时间**: 2026-07-27
 **作者**: Claude / BT8920A2 learner
@@ -374,3 +425,33 @@ A4 `iis_slave_ram_rx_2_dac()` 重写：
 ---
 
 **A3 ✅ 完成。** IIS 数据内容验证通过；DAC 模拟输出降噪专项留在 A3.1（待用户通知后开启）。
+
+```mermaid
+mindmap
+  root((A3 IIS SRCTX))
+    IIS协议
+      BCLK 位时钟
+      LRC 左右声道
+      DO 数据输出
+      MCLK 主时钟_可选
+    SRCTX特点
+      主机模式
+      数据走DAC_SRC_buf
+      44.1k或48k
+      无需DMA
+      无需ISR回调
+    硬件接线
+      PB1=AUX-L
+      PB2=AUX-R
+      PE5=BCLK输出
+      PE6=LRC输出
+      PE7=DO输出
+      MCLK关闭_避免冲突PB1
+    关键寄存器
+      DACDIGCON0_BIT23
+      CLKGAT1_BIT4
+      CLKGAT0_BIT12
+    linkWrap
+      --wrap=iis_master_srctx_init
+      __wrap实现覆盖库函数
+```

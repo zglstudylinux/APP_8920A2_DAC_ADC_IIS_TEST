@@ -9,13 +9,13 @@ void iis_slave_ram_rx_2_dac(void);
 AT(.com_text.iis_ext)
 bool iis_slave_ram_rx_2_dac_1s_print_en(void)  //iis_slave_ram_rx_2_dac 函数中是否1S一次打印DAC信息(库中回调打印)。
 {
-    return true;
+    return false;  // ★ 关闭ISR串口打印, 消除print噪音
 }
 
 AT(.com_text.iis_ext)
 bool test_aux_adc2dac_1s_print_en(void)      //test_aux_adc2dac 配置的AUX中断函数中是否1S一次打印DAC信息。//开打印有点打印噪音串到AUX
 {
-    return true;
+    return false;  // ★ 关闭ISR串口打印, 消除print噪音耦合到AUX模拟通路
 }
 
 
@@ -42,7 +42,8 @@ int main(void)
     //   板 A (A3): xcfg_cb.test_mode = TEST_AUX_ADC2IISSRCTX;  // AUX → DAC + IIS SRCTX 输出 44.1K
     //   板 B (A4): xcfg_cb.test_mode = TEST_IISRX2DAC;         // IIS SLAVE RAMRX → DAC 接收 44.1K
 //    xcfg_cb.test_mode = TEST_AUX_ADC2IISSRCTX;   // ← 板 A 默认 (烧板 B 时改下一行)
-    xcfg_cb.test_mode = TEST_IISRX2DAC;        // ← 板 B 烧录时启用
+//    xcfg_cb.test_mode = TEST_IISRX2DAC;        // ← 板 B 烧录时启用
+    xcfg_cb.test_mode = TEST_AUX_ADC2DAC;
     //测试模式(setting配置界面中选择)
     switch (xcfg_cb.test_mode) {
     case TEST_PCM2DAC:

@@ -28,6 +28,32 @@
    └─────────────────────────┘             └─────────────────────────┘
 ```
 
+```mermaid
+flowchart LR
+    subgraph 板A["板 A (A3) - IIS Master SRCTX"]
+        AUX_IN["AUX PB1/PB2"]
+        SDADC["SDADC 44.1k"]
+        FIFO_A["DAC FIFO"]
+        IIS_OUT["IIS输出: PE5 BCLK / PE6 LRC / PE7 DO"]
+        DAC_A["DAC模拟 → 耳机(可选)"]
+        AUX_IN --> SDADC --> FIFO_A --> DAC_A
+        FIFO_A --> IIS_OUT
+    end
+
+    subgraph 板B["板 B (A4) - IIS Slave RAMRX"]
+        IIS_IN["IIS输入: PE5 BCLK / PE6 LRC / PB2 DI"]
+        DMA["IIS RX DMA"]
+        BUF["iis_dmabuf1[2048B]"]
+        IRQ["IRQ_I2S_VECTOR"]
+        CB["iis_rx_process_test"]
+        FIFO_B["DAC FIFO"]
+        DAC_B["DAC模拟 → 耳机"]
+        IIS_IN --> DMA --> BUF --> IRQ --> CB --> FIFO_B --> DAC_B
+    end
+
+    IIS_OUT -->|"4根杜邦线 + GND"| IIS_IN
+```
+
 ---
 
 ## 第 1 节 · IIS 双向通信回顾 (A3 vs A4 对比)
@@ -284,6 +310,23 @@ extern u8 iis_dmabuf1[2048];
               1秒一次: print_dac_info() 打印 FIFOCNT/PHASECOM
 ```
 
+```mermaid
+sequenceDiagram
+    participant A as 板A (A3)
+    participant Wire as 杜邦线
+    participant B as 板B (A4)
+    participant DAC as DAC输出
+
+    A->>Wire: IIS SRCTX 持续输出 BCLK+LRC+DO
+    Wire->>B: PE5=BCLK PE6=LRC PB2=DI
+    B->>B: RX DMA自动接收
+    B->>B: DMA完成 → IRQ_I2S_VECTOR
+    B->>B: iis_rx_process_test(buf,64,false)
+    B->>B: aubuf_adjust() 调速
+    B->>DAC: AUBUFDATA 推FIFO
+    DAC->>DAC: 模拟输出 → 耳机
+```
+
 ---
 
 ## 第 6 节 · PC (增量测试) 步骤
@@ -488,5 +531,42 @@ DAC FIFOCNT=..., AUBUFSIZE=576, DVOL=0x7FFF, AVOL=0x10, PHASECOM=0xXX, DACDIGCON
 **作者**: Claude / BT8920A2 learner
 
 ---
+
+---
+
+```mermaid
+mindmap
+  root((A4 IIS Slave RAMRX))
+    硬件接线
+      PE5→PE5 BCLK
+      PE6→PE6 LRC
+      PE7→PB2 DI_交叉
+      GND→GND
+      PB1关MCLK
+    关键配置
+      IIS_SLAVE_RAMRX
+      IIS_G2 IO映射
+      16bit 256fs
+      MCLK_OUT_DIS
+    DMA配置
+      64samples/buf
+      2048B bram
+      iis_dmabuf1库符号
+    库回调
+      iis_rx_process_test
+      aubuf_adjust调速
+      32bit→16bit转换
+      FIFO满时丢样计数
+    踩坑
+      iis_cfg_t必须static
+      否则ERR3/7崩溃
+      EPC=0x23232324
+      dma_en=0_不是1
+    调试验收
+      FIFOCNT 50~80%
+      PHASECOM稳定<5
+      耳机听到声音
+      无咔哒声
+```
 
 **A4 ✅ 完成。** 双板联调首战即可听声;DAC 模拟输出降噪专项留在 A4.1(待用户通知后开启)。

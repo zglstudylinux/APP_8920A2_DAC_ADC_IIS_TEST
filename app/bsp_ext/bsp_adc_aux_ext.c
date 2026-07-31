@@ -344,7 +344,8 @@ void auxadc_param_init_for_a3(void)
     auxadc_cb.channel = CH_AUXL_PB1 | CH_AUXR_PB2;  //0x02 | 0x20 = 0x22
     //A3+A4 联动: 采样率改 44.1K, 与 A4 板 IIS_SLAVE_RAMRX 同步, 无跨板 SRC 异步
     auxadc_cb.sample_rate = SPR_44100;
-    //A2 调好的参数保留: samples=512, gain=(8<<6)|15
+    //★ 降噪优化: samples=512, 模拟增益8(-3dB), 数字增益15(-15dB)
+    //   (参考A2降噪教学A2任务降噪调优教学.md PC12结论)
     auxadc_cb.samples = 512;
     auxadc_cb.gain = (8 << 6) | (15);
     auxadc_irq_init();

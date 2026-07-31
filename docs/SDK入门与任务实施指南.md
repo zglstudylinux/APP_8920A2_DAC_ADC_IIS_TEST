@@ -110,10 +110,52 @@ dac_init()
 根据 xcfg_cb.test_mode 选择一个测试入口
   ├─ TEST_PCM2DAC          → test_pcm2dac()
   ├─ TEST_AUX_ADC2DAC     → test_aux_adc2dac() (A2 引脚: PB1/PB2)
-  ├─ TEST_AUX_ADC2IISSRCTX→ test_aux_adc2dac() + iis_master_srctx_init()
+  ├─ TEST_AUX_ADC2IISSRCTX→ test_aux_adc2dac_for_a3() + iis_master_srctx_init()
   └─ TEST_IISRX2DAC       → iis_slave_ram_rx_2_dac()
   ↓
 测试入口通常不会返回，最后关闭 WDT 并停在 while(1)
+```
+
+```mermaid
+flowchart TD
+    RESET["芯片复位"]
+    BOOT["SDK _start / 启动代码 / 中断向量"]
+    MAIN["main()"]
+    
+    BSP_INIT["bsp_sys_init()"]
+    XCFG["xcfg_init() 读取运行时配置"]
+    CLK["set_sys_clk(SYS_24M) 系统主频"]
+    IO["bsp_io_init() 基础IO + UART0"]
+    TMR["sys_set_tmr_enable() 开启tick"]
+    
+    DAC_INIT["dac_init()"]
+    PMU["pmu_ldo_init() 电源LDO"]
+    PLL["audio_pll_init(DAC_OUT_44K1) 音频PLL"]
+    OBUF["dac_obuf_init() DAC缓冲"]
+    PWR_ON["dac_power_on(DAC_DUAL) 模拟上电"]
+    
+    SWITCH{"xcfg_cb.test_mode?"}
+    A1["TEST_PCM2DAC → test_pcm2dac()"]
+    A2["TEST_AUX_ADC2DAC → test_aux_adc2dac()"]
+    A3["TEST_AUX_ADC2IISSRCTX → test_aux_adc2dac_for_a3() + iis_master_srctx_init()"]
+    A4["TEST_IISRX2DAC → iis_slave_ram_rx_2_dac()"]
+    
+    END["WDT_DIS(); while(1)"]
+
+    RESET --> BOOT --> MAIN
+    MAIN --> BSP_INIT
+    BSP_INIT --> XCFG --> CLK --> IO --> TMR
+    MAIN --> DAC_INIT
+    DAC_INIT --> PMU --> PLL --> OBUF --> PWR_ON
+    MAIN --> SWITCH
+    SWITCH -->|0| A1
+    SWITCH -->|1| A2
+    SWITCH -->|2| A3
+    SWITCH -->|3| A4
+    A1 --> END
+    A2 --> END
+    A3 --> END
+    A4 --> END
 ```
 
 ### 3.1 `bsp_sys_init()` 做了什么
@@ -181,6 +223,19 @@ postbuild.bat
   ├─ xmaker 打包 appxm.o → app.dcf 等
   ├─ 若存在 C:\upload\upload.bat，则尝试自动烧录
   └─ xmaker 生成 download.xm
+```
+
+```mermaid
+flowchart LR
+    CB["Code::Blocks Build"]
+    PRE["prebuild.bat\nxmaker生成res.xm+xcfg.xm"]
+    CC["编译.c→.o\nriscv32-elf-gcc -Os\n-ffunction-sections"]
+    LD_PRE["预处理 ram.ld → ram.o"]
+    LD["链接\n.o + .a + ram.o\n→ app.rv32"]
+    POST["postbuild.bat\nobjcopy→app.bin\nxmaker→app.dcf"]
+    UPLOAD["可选: upload.bat 自动烧录"]
+
+    CB --> PRE --> CC --> LD_PRE --> LD --> POST --> UPLOAD
 ```
 
 ### 4.3 主要输出文件
@@ -1097,6 +1152,22 @@ ADC → IIS OUT → IIS IN → DAC
 - 接收数据格式转换正确；
 - DAC 供数不断；
 - 长时间运行 FIFO 不会持续溢出/欠载。
+
+```mermaid
+flowchart TD
+    P0["阶段0: 建立基线 (0.5天)\n编译/烧录/串口/硬件链"]
+    P1["阶段1: 读懂DAC (1天)\nAUBUFDATA→模拟波形"]
+    P2["阶段2: A1 PCM→DAC (1天)\n16kHz输出500/1k/2kHz正弦波"]
+    P3["阶段3: A2 AUX ADC→DAC (1-2天)\n重写auxadc_pcm_to_dac"]
+    P4["阶段4: A3+A4 IIS双板 (2-3天)\nIIS_MASTER_SRCTX+IIS_SLAVE_RAMRX"]
+    P5["阶段5: B SDDAC (2-3天)\n从寄存器手册独立配置"]
+    P6["阶段6: C SDADC (2-3天)\n采样数据经SDDAC输出"]
+    P7["阶段7: D IIS全链路 (2-4天)\nADC→IIS OUT→IIS IN→DAC"]
+
+    P0 --> P1 --> P2 --> P3 --> P4
+    P4 --> P5 --> P6
+    P4 --> P7
+```
 
 ---
 
@@ -2057,3 +2128,43 @@ A2 主链路打通后，可以转去做任务 B（SDDAC 独立驱动），为 A2
 6. **DACDIGCON0=0x219** 是 16 kHz 编码成功的标志（PC1/PC2/PC6/PC12 都是这个值）。
 
 ---
+
+```mermaid
+mindmap
+  root((BT8920A2 SDK入门))
+    工程结构
+      app/bsp_ext 应用层代码
+      app/platform SDK不可改
+      app/projects/standard 当前工程
+      docs 文档
+    启动过程
+      bsp_sys_init
+      dac_init
+      test_mode分派
+    音频数据流
+      PCM数组→DAC
+      AUX→SDADC→DMA→DAC
+      DAC→IIS_SRCTX
+      IIS→DMA→DAC
+    关键寄存器
+      DACDIGCON0
+      AUANGCON3
+      AUBUFCON
+      SDADCDMAFLAG
+      CLKGAT0/1
+    调试工具
+      串口printf
+      示波器频率/Vpp
+      Audacity频谱
+      逻辑分析仪IIS
+    内存布局
+      ram.ld链接脚本
+      AT.section段属性
+      DMA_ADR地址转换
+      bram/cram/fram分区
+    Build流程
+      prebuild.bat
+      riscv32编译
+      postbuild.bat
+      app.dcf烧录
+```
